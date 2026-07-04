@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.auth import login, logout
+from utils.auth import login
 from utils.db import supabase
 
 st.set_page_config(page_title="Hospital Management System", page_icon="🏥", layout="wide")
