@@ -1,82 +1,315 @@
 import streamlit as st
 import pandas as pd
+
 from utils.auth import require_role
 from utils.db import supabase
+from fpdf import FPDF
 
-st.set_page_config(page_title="Billing", page_icon="💰", layout="wide")
-require_role(["admin", "receptionist"])
 
-st.title("💰 Billing & Invoicing")
+# ---------------- PDF FUNCTION ----------------
 
-patients = supabase.table("patients").select("id, full_name").order("full_name").execute().data
-patient_map = {p["full_name"]: p["id"] for p in patients}
+def create_bill_pdf(
+    patient,
+    service,
+    amount,
+    discount,
+    total,
+    method,
+    status
+):
 
-tab1, tab2 = st.tabs(["📋 View Bills", "➕ Generate New Bill"])
+    pdf = FPDF()
 
-# ---------------- VIEW ----------------
-with tab1:
-    data = (
-        supabase.table("bills")
-        .select("*, patients(full_name)")
-        .order("created_at", desc=True)
-        .execute()
-        .data
+    pdf.add_page()
+
+    pdf.set_font(
+        "Arial",
+        size=16
     )
 
-    rows = []
-    for b in data:
-        rows.append({
-            "id": b["id"],
-            "Patient": b["patients"]["full_name"] if b.get("patients") else "—",
-            "Date": b["bill_date"],
-            "Total (₹)": b["total_amount"],
-            "Status": b["payment_status"],
-        })
-    df = pd.DataFrame(rows)
+    pdf.cell(
+        200,
+        10,
+        "Hospital Management System",
+        ln=True,
+        align="C"
+    )
 
-    status_filter = st.selectbox("Filter by payment status", ["All", "Pending", "Partial", "Paid"])
-    if status_filter != "All" and not df.empty:
-        df = df[df["Status"] == status_filter]
+    pdf.ln(10)
 
-    st.dataframe(df, use_container_width=True)
+    pdf.set_font(
+        "Arial",
+        size=12
+    )
 
-    if not df.empty:
-        st.subheader("Update Payment")
-        selected_id = st.selectbox("Select Bill ID", df["id"].tolist())
-        new_status = st.selectbox("Payment Status", ["Pending", "Partial", "Paid"])
-        method = st.selectbox("Payment Method", ["Cash", "Card", "UPI", "Insurance"])
-        if st.button("Update Payment Status"):
-            supabase.table("bills").update({
-                "payment_status": new_status,
-                "payment_method": method,
-            }).eq("id", int(selected_id)).execute()
-            st.success("Payment status updated!")
-            st.rerun()
 
-# ---------------- GENERATE NEW ----------------
+    pdf.cell(
+        200,
+        10,
+        f"Patient Name : {patient}",
+        ln=True
+    )
+
+    pdf.cell(
+        200,
+        10,
+        f"Service : {service}",
+        ln=True
+    )
+
+    pdf.cell(
+        200,
+        10,
+        f"Amount : Rs {amount}",
+        ln=True
+    )
+
+    pdf.cell(
+        200,
+        10,
+        f"Discount : Rs {discount}",
+        ln=True
+    )
+
+    pdf.cell(
+        200,
+        10,
+        f"Total Amount : Rs {total}",
+        ln=True
+    )
+
+    pdf.cell(
+        200,
+        10,
+        f"Payment Method : {method}",
+        ln=True
+    )
+
+    pdf.cell(
+        200,
+        10,
+        f"Payment Status : {status}",
+        ln=True
+    )
+
+
+    file_name = "Hospital_Bill.pdf"
+
+    pdf.output(
+        file_name
+    )
+
+    return file_name
+
+
+
+# ---------------- PAGE ----------------
+
+
+st.set_page_config(
+    page_title="Billing",
+    page_icon="💳",
+    layout="wide"
+)
+
+
+require_role(
+    [
+        "Admin",
+        "receptionist"
+    ]
+)
+
+
+st.title(
+    "💳 Billing Management"
+)
+
+
+tab1, tab2 = st.tabs(
+    [
+        "📋 Billing Records",
+        "➕ Create Bill"
+    ]
+)
+
+
+
+# ---------------- VIEW ----------------
+
+
+with tab1:
+
+    data = supabase.table(
+        "billing"
+    ).select("*").execute().data
+
+
+    df = pd.DataFrame(
+        data
+    )
+
+
+    st.dataframe(
+        df,
+        use_container_width=True
+    )
+
+
+
+# ---------------- CREATE ----------------
+
+
 with tab2:
-    if not patient_map:
-        st.warning("Add at least one patient before generating a bill.")
-    else:
-        with st.form("generate_bill", clear_on_submit=True):
-            patient_name = st.selectbox("Patient", list(patient_map.keys()))
-            consultation_fee = st.number_input("Consultation Fee (₹)", min_value=0.0, step=100.0)
-            room_charges = st.number_input("Room Charges (₹)", min_value=0.0, step=100.0)
-            medicine_charges = st.number_input("Medicine Charges (₹)", min_value=0.0, step=50.0)
-            other_charges = st.number_input("Other Charges (₹)", min_value=0.0, step=50.0)
 
-            total = consultation_fee + room_charges + medicine_charges + other_charges
-            st.metric("Total Amount", f"₹{total:,.2f}")
 
-            submit = st.form_submit_button("Generate Bill")
-            if submit:
-                supabase.table("bills").insert({
-                    "patient_id": patient_map[patient_name],
-                    "consultation_fee": consultation_fee,
-                    "room_charges": room_charges,
-                    "medicine_charges": medicine_charges,
-                    "other_charges": other_charges,
+    patients = supabase.table(
+        "patients"
+    ).select("*").execute().data
+
+
+    patient_list = {
+
+        p["full_name"]: p["id"]
+
+        for p in patients
+
+    }
+
+
+    with st.form(
+        "billing_form",
+        clear_on_submit=True
+    ):
+
+
+        patient = st.selectbox(
+            "Select Patient",
+            list(patient_list.keys())
+        )
+
+
+        service_name = st.text_input(
+            "Service Name"
+        )
+
+
+        amount = st.number_input(
+            "Amount ₹",
+            min_value=0.0
+        )
+
+
+        discount = st.number_input(
+            "Discount ₹",
+            min_value=0.0
+        )
+
+
+        total = amount - discount
+
+
+        st.info(
+            f"Total Amount ₹ {total}"
+        )
+
+
+        payment_method = st.selectbox(
+            "Payment Method",
+            [
+                "Cash",
+                "UPI",
+                "Card"
+            ]
+        )
+
+
+        payment_status = st.selectbox(
+            "Payment Status",
+            [
+                "Paid",
+                "Pending"
+            ]
+        )
+
+
+        submit = st.form_submit_button(
+            "Generate Bill"
+        )
+
+
+        if submit:
+
+
+            supabase.table(
+                "billing"
+            ).insert(
+                {
+
+                    "patient_id": patient_list[patient],
+
+                    "patient_name": patient,
+
+                    "service_name": service_name,
+
+                    "amount": amount,
+
+                    "discount": discount,
+
                     "total_amount": total,
-                    "payment_status": "Pending",
-                }).execute()
-                st.success(f"Bill generated for {patient_name}: ₹{total:,.2f}")
+
+                    "payment_method": payment_method,
+
+                    "payment_status": payment_status
+
+                }
+            ).execute()
+
+
+            pdf_file = create_bill_pdf(
+
+                patient,
+                service_name,
+                amount,
+                discount,
+                total,
+                payment_method,
+                payment_status
+
+            )
+
+
+            st.session_state[
+                "bill_pdf"
+            ] = pdf_file
+
+
+            st.success(
+                "Bill Created Successfully"
+            )
+
+
+
+# -------- PDF DOWNLOAD OUTSIDE FORM --------
+
+
+if "bill_pdf" in st.session_state:
+
+
+    with open(
+        st.session_state["bill_pdf"],
+        "rb"
+    ) as file:
+
+
+        st.download_button(
+
+            label="📄 Download Bill PDF",
+
+            data=file,
+
+            file_name="Hospital_Bill.pdf",
+
+            mime="application/pdf"
+
+        )
