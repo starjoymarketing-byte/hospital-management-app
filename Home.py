@@ -1,14 +1,20 @@
+import streamlit as st
 import sys
 import os
 
-sys.path.append(
-    os.path.join(
-        os.path.dirname(__file__),
-        "utils"
-    )
+
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
 )
-import streamlit as st
-from auth import login, logout
+
+sys.path.insert(
+    0,
+    BASE_DIR
+)
+
+
+from utils.auth import login
+from utils.auth import logout
 from utils.db import supabase
 
 st.set_page_config(page_title="Hospital Management System", page_icon="🏥", layout="wide")
